@@ -1,4 +1,4 @@
-import OGIAddon, { ConfigurationBuilder } from 'ogi-addon';
+import OGIAddon, { ConfigurationBuilder, type BasicLibraryInfo } from 'ogi-addon';
 import { $ } from 'bun';
 import { Context, Effect, Layer, pipe } from 'effect';
 import { askAuthGeminiCLI } from './lib';
@@ -75,12 +75,29 @@ const main = Effect.fn('main')(function* () {
       return;
     }
 
+    addon.notify({
+      id: 'gemini-ai-search',
+      type: 'info',
+      message: 'Sending prompt to Gemini...',
+    });
+
     const result = yield* prompt(`
       <SYSTEM>
         You are a helpful assistant that can search the steam catalog to provide helpful 
-        search information for users when looking for video games. When providing your response from the user's query, 
-        solely provide the name of the game you think best fits the description/prompt provided. Split each game with a new line. Don't put anything as comments with parentheses or whatever. Just the name. If you don't think
-        there's a video game that fits the description/prompt provided, provide "NO_GAMES". Only provide ${addon.config.getNumberValue('max-results')} results.
+        search information for users when looking for video games.
+        SEARCH GAME RULES:
+          When providing your response from the user's query, 
+          solely provide the name of the game you think best fits the description/prompt provided. Split each game with a new line.
+          Don't put anything as comments with parentheses or whatever. Just the name.
+          If you don't think there's a video game that fits the description/prompt provided, provide "NO_GAMES".
+          Only provide ${addon.config.getNumberValue('max-results')} results.
+
+        COMMENT BLOCK RULES:
+          If you want to put a sort of comment about everything, put it in <COMMENT>...</COMMENT>. 
+          If you want to put a comment about the game, do {GAME NAME} <COMMENT>...</COMMENT> in the same line of the game.
+          If you have a lot to say about the game or are answering a question, make the comment it's own line in the <COMMENT>...</COMMENT> block.
+          Remember to put the comment block on each new line of your message, even if it's bulleted or whatever. EACH LINE MUST HAVE A COMMENT BLOCK SURROUNDING IT.
+          Or alternatively, you can make the entire message in one line.
       </SYSTEM>
       <CONTEXT>
         ${previousQueries.map((query) => `
@@ -109,16 +126,78 @@ const main = Effect.fn('main')(function* () {
       const results = result.split('\n');
       console.log('Results', results);
       const gamesFound: Awaited<ReturnType<typeof addon.searchGame>> = [];
+
+      let currentComment = '';
+      let isInMultiLineComment = false;
+      
       for (const result of results) {
-        const game = yield* Effect.promise(async () => await addon.searchGame(result, 'steam'));
+        const trimmedResult = result.trim();
+        
+        // Handle multi-line comments
+        if (trimmedResult.startsWith('<COMMENT>') && !trimmedResult.includes('</COMMENT>')) {
+          // Start of multi-line comment
+          isInMultiLineComment = true;
+          currentComment = trimmedResult.replace('<COMMENT>', '').trim();
+          continue;
+        }
+        
+        if (isInMultiLineComment) {
+          if (trimmedResult.includes('</COMMENT>')) {
+            // End of multi-line comment
+            currentComment += ' ' + trimmedResult.replace('</COMMENT>', '').trim();
+            isInMultiLineComment = false;
+            
+            // Add the complete comment as a search result
+            gamesFound.push({
+              name: currentComment.trim(),
+              appID: 0,
+              capsuleImage: '',
+              storefront: 'ai-search'
+            } as BasicLibraryInfo);
+            
+            currentComment = '';
+            continue;
+          } else {
+            // Middle of multi-line comment
+            currentComment += ' ' + trimmedResult;
+            continue;
+          }
+        }
+        
+        // Handle single-line comments
+        if (trimmedResult.startsWith('<COMMENT>') && trimmedResult.includes('</COMMENT>')) {
+          gamesFound.push({
+            name: trimmedResult.replace('<COMMENT>', '').replace('</COMMENT>', '').trim(),
+            appID: 0,
+            capsuleImage: '',
+            storefront: 'ai-search'
+          } as BasicLibraryInfo);
+          continue;
+        }
+        
+        // Handle game names with inline comments
+        const gameName = trimmedResult.replace(/<COMMENT>.*?<\/COMMENT>/g, '').trim();
+        const comment = trimmedResult.match(/<COMMENT>(.*?)<\/COMMENT>/)?.[1] || '';
+        
+        // Skip empty game names
+        if (!gameName) {
+          continue;
+        }
+        
+        const game = yield* Effect.promise(async () => await addon.searchGame(gameName, 'steam'));
         if (game.length === 0) {
           continue;
         }
 
         // match exact name
-        const exactMatch = game.find((game) => game.name.toLowerCase() === result.toLowerCase());
+        const exactMatch = game.find((game) => game.name.toLowerCase() === gameName.toLowerCase());
         if (exactMatch) {
-          gamesFound.push(exactMatch);
+          gamesFound.push({
+            name: exactMatch.name + (comment ? ` (${comment})` : ''),
+            appID: exactMatch.appID,
+            capsuleImage: exactMatch.capsuleImage,
+            storefront: exactMatch.storefront
+          });
           continue;
         }
       }
