@@ -1,0 +1,14 @@
+{
+  "name": "gemini-ai-search",
+  "module": "main.ts",
+  "type": "module",
+  "dependencies": {
+    "effect": "^3.17.14",
+    "ogi-addon": "^1.7.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.22",
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.2"
+  }
+}
