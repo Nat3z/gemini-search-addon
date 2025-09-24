@@ -26,5 +26,5 @@
     "noPropertyAccessFromIndexSignature": false,
     "typeRoots": ["node_modules/@types"]
   },
-  "files": ["main.ts"]
+  "files": ["main.ts", "lib.ts"]
 }

@@ -1,6 +1,7 @@
 import OGIAddon, { ConfigurationBuilder } from 'ogi-addon';
 import { $ } from 'bun';
 import { Context, Effect, Layer, pipe } from 'effect';
+import { askAuthGeminiCLI } from './lib';
 
 class AddonService extends Context.Tag("AddonService")<AddonService, { addon: OGIAddon, prompt: (query: string) => Effect.Effect<string> }>() { }
 
@@ -34,9 +35,8 @@ const main = Effect.fn('main')(function* () {
         new ConfigurationBuilder()
       ));
 
-      const result = yield* prompt('bunx @google/gemini-cli -m "gemini-2.5-flash" -p "Hello there, this is to make sure I am connected. If so, just say "connected"');
-      if (result.trim() !== 'connected') {
-        console.log(result.trim());
+      const result = yield* Effect.promise(async () => await askAuthGeminiCLI());
+      if (!result) {
         isConnected = false;
         addon.notify({
           id: 'gemini-ai-search',

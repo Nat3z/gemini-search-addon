@@ -1,6 +1,6 @@
 import * as pty from 'bun-pty';
 
-export function askAuthGeminiCLI(): Promise<string> {
+export function askAuthGeminiCLI(): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const proc = pty.spawn('bash', [], {
       name: 'xterm-color',
@@ -16,7 +16,16 @@ export function askAuthGeminiCLI(): Promise<string> {
 
     proc.onData(async (data: string) => {
       output += data;
-      if (data.includes('gemini-') && data.includes('context left)') && !ranAuth) {
+      if (authWaiting && data.includes('gemini-') && data.includes('context left)')) {
+        authWaiting = false;
+        console.log('Auth complete');
+        proc.write('/exit');
+        await new Promise(res => setTimeout(res, 1000));
+        proc.write('\r\n');
+        await new Promise(res => setTimeout(res, 1000));
+        // -- now stop the process --
+        proc.write('exit\r\n');
+      } else if (data.includes('gemini-') && data.includes('context left)') && !ranAuth) {
         ranAuth = true;
         proc.write('/auth');
         console.log('Ran auth');
@@ -29,21 +38,12 @@ export function askAuthGeminiCLI(): Promise<string> {
         proc.write('1\r\n');
         authWaiting = true;
       }
-      else if (authWaiting && data.includes('gemini-') && data.includes('context left)')) {
-        authWaiting = false;
-        console.log('Auth complete');
-        proc.write('/exit');
-        await new Promise(res => setTimeout(res, 1000));
-        proc.write('\r\n');
-        await new Promise(res => setTimeout(res, 1000));
-        // -- now stop the process --
-        proc.write('exit\r\n');
-      }
+      
     });
 
     proc.onExit(({ exitCode, signal }) => {
       if (exitCode === 0) {
-        resolve(output);
+        resolve(ranAuth);
       } else {
         reject(new Error(`Process exited with code ${exitCode}, signal ${signal}`));
       }
