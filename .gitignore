@@ -176,3 +176,6 @@ dist
 
 # OGI Addon
 *.log
+
+# First run file
+first-run.txt

@@ -1,4 +1,4 @@
-import OGIAddon from 'ogi-addon';
+import OGIAddon, { ConfigurationBuilder } from 'ogi-addon';
 import { $ } from 'bun';
 import { Context, Effect, Layer, pipe } from 'effect';
 
@@ -7,6 +7,7 @@ class AddonService extends Context.Tag("AddonService")<AddonService, { addon: OG
 
 const main = Effect.fn('main')(function* () {
   const { addon, prompt } = yield* AddonService;
+  let isConnected = false;
   
   addon.on('configure', (config) => config
     .addNumberOption(option =>
@@ -20,8 +21,38 @@ const main = Effect.fn('main')(function* () {
     )
   );
 
-  addon.on('connect', () => 
+  addon.on('connect', (event) => 
     Effect.gen(function* () {
+      const file = Bun.file('./first-run.txt');
+      if (yield* Effect.promise(async () => await file.exists())) {
+        isConnected = true;
+        return;
+      }
+      yield* Effect.promise(async () => await event.askForInput(
+        'Gemini AI Search',
+        'Because this is your first time running the addon, you will need to authenticate with your Google account to the Gemini CLI. On this next step, you will be redirected to Google to authenticate. Afterwards, you will know if it was successful or not.',
+        new ConfigurationBuilder()
+      ));
+
+      const result = yield* prompt('bunx @google/gemini-cli -m "gemini-2.5-flash" -p "Hello there, this is to make sure I am connected. If so, just say "connected"');
+      if (result.trim() !== 'connected') {
+        console.log(result.trim());
+        isConnected = false;
+        addon.notify({
+          id: 'gemini-ai-search',
+          type: 'error',
+          message: 'Authentication failed',
+        });
+        event.fail('Authentication failed');
+        return;
+      }
+      isConnected = true;
+      yield* Effect.promise(async () => await file.write('true'));
+      addon.notify({
+        id: 'gemini-ai-search',
+        type: 'success',
+        message: 'Authenticated with Gemini',
+      });
     }).pipe(
       Effect.runFork
     )
@@ -37,6 +68,10 @@ const main = Effect.fn('main')(function* () {
     yield* Effect.promise(async () => await new Promise(resolve => setTimeout(resolve, 2000)));
     if (currentQuery !== query) {
       event.fail('Query changed');
+      return;
+    }
+    if (!isConnected) {
+      event.fail('Not connected to Gemini');
       return;
     }
 
@@ -112,11 +147,11 @@ Effect.runSync(pipe(
 
       author: 'Nat3z',
       description: 'A Gemini AI Search addon for OpenGameInstaller',
-      repository: 'https://github.com/Nat3z/gemini-ai-search',
+      repository: 'https://github.com/Nat3z/gemini-search-addon',
       storefronts: [],
     }),
     prompt: (query) => Effect.gen(function* () {
-      const result = yield* Effect.promise(async () => await $`gemini -m "gemini-2.5-flash" -p "${query}"`.text());
+      const result = yield* Effect.promise(async () => await $`bunx @google/gemini-cli -m "gemini-2.5-flash" -p "${query}"`.text());
       
       return result;
     }),
