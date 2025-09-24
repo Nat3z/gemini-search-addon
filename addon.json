@@ -1,5 +1,6 @@
 {
   "author": "Nat3z",
+  "icon": "icon.png",
   "scripts": {
     "preSetup": "bun install --frozen-lockfile",
     "setup": "echo 'setup script is running'",

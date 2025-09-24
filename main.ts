@@ -75,12 +75,6 @@ const main = Effect.fn('main')(function* () {
       return;
     }
 
-    addon.notify({
-      id: 'gemini-ai-search',
-      type: 'info',
-      message: 'Sending prompt to Gemini...',
-    });
-
     const result = yield* prompt(`
       <SYSTEM>
         You are a helpful assistant that can search the steam catalog to provide helpful 
@@ -96,8 +90,6 @@ const main = Effect.fn('main')(function* () {
           If you want to put a sort of comment about everything, put it in <COMMENT>...</COMMENT>. 
           If you want to put a comment about the game, do {GAME NAME} <COMMENT>...</COMMENT> in the same line of the game.
           If you have a lot to say about the game or are answering a question, make the comment it's own line in the <COMMENT>...</COMMENT> block.
-          Remember to put the comment block on each new line of your message, even if it's bulleted or whatever. EACH LINE MUST HAVE A COMMENT BLOCK SURROUNDING IT.
-          Or alternatively, you can make the entire message in one line.
       </SYSTEM>
       <CONTEXT>
         ${previousQueries.map((query) => `
@@ -137,29 +129,32 @@ const main = Effect.fn('main')(function* () {
         if (trimmedResult.startsWith('<COMMENT>') && !trimmedResult.includes('</COMMENT>')) {
           // Start of multi-line comment
           isInMultiLineComment = true;
-          currentComment = trimmedResult.replace('<COMMENT>', '').trim();
+          currentComment = trimmedResult.replace('<COMMENT>', '').trim() + '\n';
           continue;
         }
         
         if (isInMultiLineComment) {
           if (trimmedResult.includes('</COMMENT>')) {
             // End of multi-line comment
-            currentComment += ' ' + trimmedResult.replace('</COMMENT>', '').trim();
+            currentComment += ' ' + trimmedResult.replace('</COMMENT>', '').trim() + '\n';
             isInMultiLineComment = false;
             
             // Add the complete comment as a search result
-            gamesFound.push({
-              name: currentComment.trim(),
-              appID: 0,
-              capsuleImage: '',
-              storefront: 'ai-search'
-            } as BasicLibraryInfo);
+            for (const line of currentComment.split('\n')) {
+              gamesFound.push({
+                name: line.trim(),
+                appID: 0,
+                capsuleImage: '',
+                  storefront: 'ai-search'
+              } as BasicLibraryInfo);
+            }
+
             
             currentComment = '';
             continue;
           } else {
             // Middle of multi-line comment
-            currentComment += ' ' + trimmedResult;
+            currentComment += ' ' + trimmedResult + '\n';
             continue;
           }
         }
