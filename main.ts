@@ -117,7 +117,7 @@ const main = Effect.fn('main')(function* () {
       });
       const results = result.split('\n');
       console.log('Results', results);
-      const gamesFound: Awaited<ReturnType<typeof addon.searchGame>> = [];
+      let gamesFound: Awaited<ReturnType<typeof addon.searchGame>> = [];
 
       let currentComment = '';
       let isInMultiLineComment = false;
@@ -196,6 +196,9 @@ const main = Effect.fn('main')(function* () {
           continue;
         }
       }
+
+      // remove any gamesFound with no name
+      gamesFound = gamesFound.filter((game) => game.name !== '');
 
       // if the user allowed conversational mode, store the query and response
       if (addon.config.getBooleanValue('conversational')) {
